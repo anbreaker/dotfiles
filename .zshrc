@@ -158,3 +158,7 @@ WM_CMD="herdr"
 if [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
     exec $WM_CMD
 fi
+
+# Personal config (anbreaker) — deliberately kept OUTSIDE this repo so a secret can never end up
+# in a commit here again. Not part of the upstream reibaj91/dotfiles PR.
+[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
