@@ -8,6 +8,10 @@ elif [ -x /usr/local/bin/brew ]; then
     eval "$(/usr/local/bin/brew shellenv)"
 fi
 
+# ~/.local/bin needs to be on PATH early: on Linux, install.sh's Herdr installer puts the
+# binary there, and the Herdr auto-attach check further down in this file needs to find it.
+export PATH="$HOME/.local/bin:$PATH"
+
 # Path to your Oh My Zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
 
