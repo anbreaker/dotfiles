@@ -138,16 +138,6 @@ if [ -f "$HOME/dev/COMMON/TOOLS/GCP/google-cloud-sdk/path.zsh.inc" ]; then . "$H
 # The next line enables shell command completion for gcloud.
 if [ -f "$HOME/dev/COMMON/TOOLS/GCP/google-cloud-sdk/completion.zsh.inc" ]; then . "$HOME/dev/COMMON/TOOLS/GCP/google-cloud-sdk/completion.zsh.inc"; fi
 
-# Aliases (from previous config)
-alias wrk="cd ~/dev/vitaly/Workspace"
-alias vplay="cd ~/dev/vitaly/TPS"
-alias mci="mvn clean install"
-alias mcs="mvn clean install -DskipTests"
-alias greset="git reset --soft HEAD~1"
-alias gdev="git checkout develop"
-alias gmain="git checkout main"
-alias grbs="git pull --rebase origin develop"
-
 # ~/.local/bin on PATH (from previous config)
 if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; fi
 

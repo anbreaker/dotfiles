@@ -18,6 +18,11 @@ copy-on-select = clipboard
 adjust-cell-width = "10%"
 focus-follows-mouse = true
 
+# Ctrl+C copia si hay seleccion; si no hay seleccion, se comporta como si el
+# keybind no existiera y el SIGINT llega normal al proceso corriendo.
+keybind = performable:ctrl+c=copy_to_clipboard
+keybind = ctrl+v=paste_from_clipboard
+
 palette = 0=#000000
 palette = 1=#990000
 palette = 2=#72A52E
@@ -34,3 +39,14 @@ palette = 12=#5255FE
 palette = 13=#CF63E5
 palette = 14=#93E6E4
 palette = 15=#E5E5E5
+
+# >>> herdr setup >>>
+# Clona el comportamiento de Cmd+D/Cmd+Shift+D de Mac: en vez del split nativo
+# de Ghostty (ctrl+shift+o/e en Linux), envia el prefix de Herdr (ctrl+b = \x02)
+# para disparar el split INTERNO de Herdr y mantener la misma sesion persistente.
+# super+d queda reservado por GNOME (show-desktop a nivel de sistema, ver
+# gsettings org.gnome.desktop.wm.keybindings show-desktop) y nunca llega a
+# Ghostty, por eso se usa alt+d en su lugar.
+keybind = alt+d=text:\x02v
+keybind = alt+shift+d=text:\x02-
+# <<< herdr setup <<<
