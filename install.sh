@@ -71,6 +71,11 @@ if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
     git clone https://github.com/zsh-users/zsh-syntax-highlighting "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
 fi
 
+if [ ! -d "$ZSH_CUSTOM/plugins/zsh-autocomplete" ]; then
+    echo "Installing zsh-autocomplete..."
+    git clone --depth 1 https://github.com/marlonrichert/zsh-autocomplete "$ZSH_CUSTOM/plugins/zsh-autocomplete"
+fi
+
 # Backup existing configs
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -94,6 +99,26 @@ ln -sf "$SCRIPT_DIR/.p10k.zsh" "$HOME/.p10k.zsh"
 # Claude Code statusline
 mkdir -p "$HOME/.claude"
 ln -sf "$SCRIPT_DIR/claude/statusline.sh" "$HOME/.claude/statusline.sh"
+
+# jq is needed to wire the statusline into settings.json. Offer to install it on
+# Debian/Ubuntu-based Linux (Parrot included) before falling back to manual instructions.
+if ! command -v jq >/dev/null 2>&1 && [ "$OS_TYPE" = "Linux" ] && command -v apt-get >/dev/null 2>&1; then
+    JQ_REPLY="n"
+    if [ -t 0 ]; then
+        read -r -p "jq is missing (needed for the Claude Code statusline). Install it via 'sudo apt-get install jq'? [y/N] " JQ_REPLY
+    else
+        echo "Non-interactive shell: skipping jq install prompt. Run 'sudo apt-get install jq' manually if you want it."
+    fi
+    case "$JQ_REPLY" in
+        [Yy]*)
+            sudo apt-get install -y jq || echo "jq install failed; run: sudo apt-get install jq"
+            ;;
+        *)
+            echo "Skipping jq. Wire the statusLine block into ~/.claude/settings.json manually (see README)."
+            ;;
+    esac
+fi
+
 if command -v jq >/dev/null 2>&1; then
     SETTINGS="$HOME/.claude/settings.json"
     [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"

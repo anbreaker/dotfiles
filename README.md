@@ -16,6 +16,7 @@ Personal zsh, terminal and Claude Code configuration.
 - git
 - zsh-autosuggestions
 - zsh-syntax-highlighting
+- zsh-autocomplete
 
 ## Installation
 
@@ -81,9 +82,10 @@ Notes:
 
 - Ghostty itself isn't installed by the script (same as on macOS) — install it separately from
   https://ghostty.org before running `install.sh`, otherwise the config just sits there unused.
-- `jq` is needed for the Claude Code statusline wiring; if missing, install it with
-  `sudo apt install jq` and re-run `install.sh`, or add the `statusLine` block manually (see
-  below).
+- `jq` is needed for the Claude Code statusline wiring. If missing, `install.sh` offers to install
+  it via `sudo apt-get install jq` (prompts for confirmation, same pattern as the Herdr prompt).
+  Answering "n" or running non-interactively skips it — add the `statusLine` block manually (see
+  below) or re-run `install.sh` later.
 - Tested on Ubuntu; other Debian-based distros with `apt` should work the same for the manual
   steps above, but the script itself doesn't special-case them beyond the generic `Linux` branch.
 - Herdr installs silently on macOS (via brew) but **prompts for confirmation on Linux** before
