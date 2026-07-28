@@ -81,9 +81,20 @@ ZSH_THEME="agnoster"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
+plugins=(zsh-autocomplete git zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
+
+# zsh-autocomplete: forzar que Tab/Shift-Tab naveguen el menú de completado
+# (por defecto ya lo hacen, pero lo dejamos explícito por si otro plugin lo pisa)
+bindkey -M menuselect '^I' menu-complete
+bindkey -M menuselect "$terminfo[kcbt]" reverse-menu-complete
+
+# zsh-autocomplete pisa las flechas arriba/abajo con su propio widget de menú de
+# historial, perdiendo el up-line-or-search de Oh My Zsh (buscar en el historial
+# respetando el prefijo ya escrito). Lo restauramos.
+bindkey '^[[A' up-line-or-search
+bindkey '^[[B' down-line-or-search
 
 # User configuration
 
@@ -141,18 +152,32 @@ if [ -f "$HOME/dev/COMMON/TOOLS/GCP/google-cloud-sdk/completion.zsh.inc" ]; then
 # ~/.local/bin on PATH (from previous config)
 if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; fi
 
-# Colima + Testcontainers (WLS-29): que Testcontainers encuentre el daemon de Colima
-export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
-export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
+# Testcontainers (WLS-29): Docker Desktop en Linux no expone /var/run/docker.sock (eso es Mac-only),
+# así que apuntamos directo al socket de usuario de Docker Desktop
+export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="unix://$HOME/.docker/desktop/docker.sock"
 
 # Auto-attach a Herdr en cada terminal nueva (Ghostty, Terminal.app, etc.)
+# Sesion por directorio: cada cwd distinto abre/reattachea su propia sesion de
+# Herdr (nombre = slug del basename + hash corto del path completo, para
+# evitar colisiones entre proyectos con el mismo nombre de carpeta). Volver al
+# mismo directorio reattachea la misma sesion; no acumula sesiones sueltas
+# porque el nombre es estable por path, no por PID.
 # Rollback: comentar o borrar este bloque y abrir una pestaña nueva.
 WM_VAR="$HERDR_ENV"
 WM_CMD="herdr"
 if [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
-    exec $WM_CMD
+    __herdr_slug="$(basename "$PWD" | tr -c 'a-zA-Z0-9' '-' | tr -s '-' | sed 's/^-//;s/-$//')"
+    __herdr_hash="$(echo -n "$PWD" | cksum | cut -d' ' -f1 | cut -c1-6)"
+    exec $WM_CMD --session "${__herdr_slug:-root}-${__herdr_hash}"
 fi
 
 # Personal config (anbreaker) — deliberately kept OUTSIDE this repo so a secret can never end up
 # in a commit here again. Not part of the upstream reibaj91/dotfiles PR.
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
+
+# bun completions
+[ -s "/home/anbreaker/.bun/_bun" ] && source "/home/anbreaker/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
