@@ -152,9 +152,16 @@ if [ -f "$HOME/dev/COMMON/TOOLS/GCP/google-cloud-sdk/completion.zsh.inc" ]; then
 # ~/.local/bin on PATH (from previous config)
 if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; fi
 
-# Testcontainers (WLS-29): Docker Desktop en Linux no expone /var/run/docker.sock (eso es Mac-only),
-# así que apuntamos directo al socket de usuario de Docker Desktop
-export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="unix://$HOME/.docker/desktop/docker.sock"
+# Testcontainers (WLS-29): point at whichever Docker socket is actually in use.
+# Mac uses Colima. Linux may use Docker Desktop (~/.docker/desktop/docker.sock) or the
+# native Docker Engine, which already listens on the default /var/run/docker.sock (no
+# override needed there).
+if [ "$(uname -s)" = "Darwin" ] && command -v colima >/dev/null 2>&1; then
+    export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+    export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
+elif [ "$(uname -s)" = "Linux" ] && [ -S "$HOME/.docker/desktop/docker.sock" ]; then
+    export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="unix://$HOME/.docker/desktop/docker.sock"
+fi
 
 # Auto-attach a Herdr en cada terminal nueva (Ghostty, Terminal.app, etc.)
 # Sesion por directorio: cada cwd distinto abre/reattachea su propia sesion de
@@ -176,7 +183,7 @@ fi
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
 
 # bun completions
-[ -s "/home/anbreaker/.bun/_bun" ] && source "/home/anbreaker/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"
