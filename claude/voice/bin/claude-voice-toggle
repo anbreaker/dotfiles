@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Start, stop or inspect claude-voice running in the background.
+# Usage: claude-voice-toggle [on|off|status|toggle]   (default: toggle)
+set -uo pipefail
+
+STATE_DIR="$HOME/.cache/claude-voice"
+PIDFILE="$STATE_DIR/pid"
+LOGFILE="$STATE_DIR/log"
+mkdir -p "$STATE_DIR"
+
+running() {
+  [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
+}
+
+start() {
+  if running; then
+    echo "already on (pid $(cat "$PIDFILE"))"
+    return
+  fi
+  nohup "$HOME/.local/bin/claude-voice" >>"$LOGFILE" 2>&1 </dev/null &
+  echo $! >"$PIDFILE"
+  echo "on (pid $!), log: $LOGFILE"
+}
+
+stop() {
+  if ! running; then
+    echo "already off"
+    rm -f "$PIDFILE"
+    return
+  fi
+  pid="$(cat "$PIDFILE")"
+  pkill -P "$pid" 2>/dev/null
+  kill "$pid" 2>/dev/null
+  rm -f "$PIDFILE"
+  echo "off"
+}
+
+case "${1:-toggle}" in
+  on) start ;;
+  off) stop ;;
+  status) running && echo "on (pid $(cat "$PIDFILE"))" || echo "off" ;;
+  toggle) running && stop || start ;;
+  summary)
+    NO_SUMMARY="$STATE_DIR/no-summary"
+    case "${2:-status}" in
+      on) rm -f "$NO_SUMMARY"; echo "summary reading: on" ;;
+      off) touch "$NO_SUMMARY"; "$HOME/.local/bin/claude-speak" stop; echo "summary reading: off" ;;
+      status) [ -f "$NO_SUMMARY" ] && echo "summary reading: off" || echo "summary reading: on" ;;
+      *) echo "usage: claude-voice-toggle summary [on|off|status]" >&2; exit 2 ;;
+    esac ;;
+  *) echo "usage: claude-voice-toggle [on|off|status|toggle|summary on|off|status]" >&2; exit 2 ;;
+esac

@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Synthesize text from stdin with Piper and stream raw s16le mono PCM to stdout.
+
+Run it with the Piper venv interpreter (claude-speak does).
+Usage: claude-speak-synth MODEL.onnx [SPEAKER_ID] [LENGTH_SCALE] [SENTENCE_SILENCE_SECONDS]
+
+Ends with os._exit(0): onnxruntime can abort while the interpreter shuts down
+("recursive_mutex lock failed"), which macOS reports as "Python quit unexpectedly".
+The audio is already written by then, so skipping the teardown is safe.
+"""
+import os
+import sys
+
+from piper import PiperVoice, SynthesisConfig
+
+
+def main():
+    model = sys.argv[1]
+    speaker = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+    length_scale = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0
+    pause = float(sys.argv[4]) if len(sys.argv) > 4 else 0.4
+
+    text = sys.stdin.read()
+    voice = PiperVoice.load(model)
+    config = SynthesisConfig(speaker_id=speaker, length_scale=length_scale)
+
+    out = sys.stdout.buffer
+    for chunk in voice.synthesize(text, syn_config=config):
+        out.write(chunk.audio_int16_bytes)
+        out.write(bytes(int(chunk.sample_rate * pause) * 2))
+        out.flush()
+    os._exit(0)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BrokenPipeError:
+        os._exit(0)

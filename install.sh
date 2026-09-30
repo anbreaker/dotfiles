@@ -167,4 +167,19 @@ if command -v herdr >/dev/null 2>&1 && command -v claude >/dev/null 2>&1; then
     herdr integration install claude || true
 fi
 
+# Claude Code voice kit (macOS): local dictation + spoken answers. Opt-in: it downloads ~1.7 GB
+# of models and needs Microphone and Accessibility permissions.
+if [ "$OS_TYPE" = "Darwin" ]; then
+    VOICE_REPLY="n"
+    if [ -t 0 ]; then
+        read -r -p "Install the Claude Code voice kit (\"Oye Claude\" dictation + spoken answers, ~1.7 GB)? [y/N] " VOICE_REPLY
+    else
+        echo "Non-interactive shell: skipping the Claude voice kit. Run '$SCRIPT_DIR/claude/voice/install.sh' manually if you want it."
+    fi
+    case "$VOICE_REPLY" in
+        [Yy]*) bash "$SCRIPT_DIR/claude/voice/install.sh" || echo "Voice kit install failed; rerun: $SCRIPT_DIR/claude/voice/install.sh" ;;
+        *) echo "Skipping the Claude voice kit." ;;
+    esac
+fi
+
 echo "Done! Restart your terminal or run: source ~/.zshrc"
