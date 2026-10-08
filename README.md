@@ -184,9 +184,7 @@ remove those manually if you uninstall.
 
 Everything here is **optional**: each step asks `[y/N]` (default No), only when stdin is a TTY, and
 on decline, non-interactive runs or failure it prints the exact manual command and continues. A step that
-is already done (config already linked, plugin already installed) is skipped without asking. The
-exception is `windows/install.ps1`, which still links the config without asking (it backs up a real
-file first).
+is already done (config already linked, plugin already installed) is skipped without asking.
 
 - **Config** — if `herdr` is installed, `install.sh` asks before linking `herdr/config.toml` to
   `~/.config/herdr/config.toml`. Accepting replaces any existing config with this repo's theme/panel
@@ -254,5 +252,5 @@ file first).
   are not included and belong in `~/.zshrc.local`, calling that function and falling back to
   `command <cmd>`. Rollback: remove the flag and open a new terminal.
 - **Windows is untested** — `windows/install.ps1` has the equivalent config link (assumes
-  `%USERPROFILE%\.config\herdr`), the same two pinned plugins with a `Read-Host` consent, and Go via
+  `%USERPROFILE%\.config\herdr`, with a `Read-Host` consent), the same two pinned plugins with a `Read-Host` consent, and Go via
   `winget` (`GoLang.Go`), but none of it has been run on a real Windows machine.
