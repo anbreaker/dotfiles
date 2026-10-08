@@ -1,0 +1,97 @@
+# English terms -> Spanish respelling, applied before speaking (claude-speak).
+# Format: term=respelling   (case-insensitive, whole words, longest match first)
+# Accents mark the stressed syllable. Add your own lines at the bottom.
+
+# Git and delivery
+pull request=pul recuést
+pull requests=pul recuésts
+merge request=merch recuést
+commit=comit
+commits=comits
+push=puch
+pull=pul
+merge=merch
+rebase=ribéis
+branch=bránch
+branches=bránches
+checkout=chécaut
+stash=estásh
+hotfix=jótfics
+release=rilís
+releases=rilíses
+rollback=rólbak
+deploy=diplói
+deployment=diplóiment
+pipeline=páiplain
+pipelines=páiplains
+build=bild
+builds=bilds
+runner=ráner
+workflow=uórkflou
+staging=estéiyin
+issue=ísiu
+review=rivíu
+Git=guit
+GitHub=guithab
+GitLab=guitlab
+
+# Code and tooling
+bug=bag
+bugs=bags
+debug=dibág
+debugging=dibáguin
+fix=fics
+hook=juk
+hooks=juks
+script=escrip
+scripts=escrips
+feature=físher
+frontend=frontén
+backend=bákend
+endpoint=endpóint
+endpoints=endpóints
+middleware=mídluer
+webhook=uébjuk
+payload=péilod
+timeout=táimaut
+retry=ritrái
+cache=cash
+hash=jash
+mock=mok
+mocks=moks
+thread=zred
+sandbox=sándbox
+dashboard=dáshbord
+input=ínput
+output=áutput
+feedback=fídbak
+prompt=prómpt
+skill=eskil
+skills=eskils
+kill switch=kil suích
+switch=suích
+
+# Products and stacks
+Docker=dóker
+Kubernetes=kubernétis
+Helm=jelm
+Flux=flocs
+namespace=néimspeis
+Pub/Sub=pab sab
+JSON=yéison
+API=a pe i
+APIs=a pe is
+CLI=ce ele i
+URL=u erre ele
+README=ridmi
+JavaScript=yavascrip
+TypeScript=taipescrip
+Spring Boot=espring but
+Maven=méiven
+Liquibase=líquibeis
+PostgreSQL=postgres ese cu ele
+SQL=ese cu ele
+Claude=Clod
+Ghostty=gostí
+Whisper=güísper
+Piper=páiper

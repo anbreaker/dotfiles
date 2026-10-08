@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Speak text with Piper (local neural TTS, streamed), falling back to macOS `say`.
+# Usage:
+#   claude-speak "text..."      speak (replaces anything already being spoken)
+#   echo text | claude-speak    same, text from stdin
+#   claude-speak stop           stop speaking
+# While speaking, the pid of this process is in ~/.cache/claude-voice/speaking.pid so the
+# dictation recorder can ignore its own speech.
+set -uo pipefail
+
+STATE_DIR="$HOME/.cache/claude-voice"
+PIDFILE="$STATE_DIR/speaking.pid"
+PIPER_HOME="$HOME/.local/share/piper"
+VOICE="${CLAUDE_PIPER_VOICE:-$PIPER_HOME/voices/es_ES-sharvard-medium.onnx}"
+SPEAKER="${CLAUDE_PIPER_SPEAKER:-0}"
+LENGTH_SCALE="${CLAUDE_PIPER_LENGTH:-1.0}"   # >1 is slower
+SENTENCE_SILENCE="${CLAUDE_PIPER_PAUSE:-0.4}"
+mkdir -p "$STATE_DIR"
+
+kill_tree() {
+  local child
+  for child in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$child"; done
+  kill "$1" 2>/dev/null
+}
+
+stop_speaking() {
+  if [ -f "$PIDFILE" ]; then
+    kill_tree "$(cat "$PIDFILE")"
+    rm -f "$PIDFILE"
+  fi
+  pkill -x say 2>/dev/null
+}
+
+if [ "${1:-}" = "stop" ] && [ $# -eq 1 ]; then
+  stop_speaking
+  exit 0
+fi
+
+text="${*:-$(cat)}"
+[ -z "$text" ] && exit 0
+# Markdown, symbols, numbers, identifiers and English terms -> natural Spanish speech.
+text="$(printf '%s' "$text" | "$HOME/.local/bin/claude-speak-normalize" ${CLAUDE_SPEAK_MAX:+--max "$CLAUDE_SPEAK_MAX"})"
+[ -z "$text" ] && exit 0
+
+if [ -n "${CLAUDE_SPEAK_DRY:-}" ]; then
+  printf '%s\n' "$text"
+  exit 0
+fi
+
+stop_speaking
+echo $$ >"$PIDFILE"
+# The end of a reading reopens the dictation conversation window (see claude-voice).
+trap 'rm -f "$PIDFILE"; date +%s >"$STATE_DIR/spoke-at"' EXIT
+trap 'exit 0' INT TERM
+
+if [ -x "$PIPER_HOME/venv/bin/python" ] && [ -f "$VOICE" ] && command -v play >/dev/null; then
+  sample_rate="$(jq -r '.audio.sample_rate' "$VOICE.json")"
+  printf '%s' "$text" \
+    | "$PIPER_HOME/venv/bin/python" "$HOME/.local/bin/claude-speak-synth" "$VOICE" "$SPEAKER" "$LENGTH_SCALE" "$SENTENCE_SILENCE" 2>/dev/null \
+    | play -q -t raw -r "$sample_rate" -e signed-integer -b 16 -c 1 - vol 0.85 2>/dev/null
+else
+  /usr/bin/say -v "${CLAUDE_SAY_VOICE:-Rocko (Spanish (Spain))}" -- "$text"
+fi

@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# Hands-free voice input for Claude Code (local, nothing leaves this machine).
+# Listens to the default microphone, transcribes each utterance with whisper.cpp and,
+# only when it starts with the wake phrase "Oye Claude", pastes the rest into the
+# frontmost terminal window and presses Enter.
+#
+# Usage:
+#   claude-voice                 listen until Ctrl+C
+#   claude-voice --file x.wav    transcribe a file and print the parsed command (no paste)
+set -uo pipefail
+
+CONF="$HOME/.config/claude-voice.conf"      # threshold from --calibrate plus personal overrides (CLAUDE_VOICE_*)
+[ -f "$CONF" ] && . "$CONF"
+
+MODEL="${WHISPER_MODEL:-$HOME/.local/share/whisper-models/ggml-large-v3-turbo.bin}"
+VAD_MODEL="${WHISPER_VAD_MODEL:-$HOME/.local/share/whisper-models/ggml-silero-v5.1.2.bin}"
+SPOKE_AT="$HOME/.cache/claude-voice/spoke-at"   # written by claude-speak when it stops talking
+LANG_CODE="${CLAUDE_VOICE_LANG:-es}"
+THRESHOLD="${CLAUDE_VOICE_THRESHOLD:-1%}"   # level below which an utterance is considered over
+# Starting needs a louder sound than stopping (hysteresis), so room noise does not trigger recordings.
+START_THRESHOLD="$(awk -v t="${THRESHOLD%\%}" 'BEGIN { printf "%.2f%%", t*1.3 }')"
+SILENCE="${CLAUDE_VOICE_SILENCE:-1}"      # seconds of silence that end an utterance
+TARGET_APP="${CLAUDE_VOICE_APP:-ghostty}"   # only paste when this app is frontmost
+WINDOW="${CLAUDE_VOICE_WINDOW:-20}"         # seconds after a send during which no wake phrase is needed
+# Output devices matching this are treated as headsets: you can interrupt the reading by voice.
+export CLAUDE_VOICE_HEADSET_RE="${CLAUDE_VOICE_HEADSET_RE:-corsair|hs80|headset|headphone|auricular|airpods}"
+HEADSET_RE="$CLAUDE_VOICE_HEADSET_RE"
+last_sent=0
+
+KEEP_DIR="$HOME/.cache/claude-voice/utterances"
+WORKDIR="$(mktemp -d)"
+trap 'rm -rf "$WORKDIR"' EXIT
+trap 'exit 0' INT TERM
+
+transcribe() {
+  local vad=()
+  # Silero VAD skips non-speech audio, which is what whisper turns into "Gracias por ver el video".
+  [ -f "$VAD_MODEL" ] && vad=(--vad -vm "$VAD_MODEL")
+  whisper-cli -m "$MODEL" -l "$LANG_CODE" -nt -np --prompt "Oye Claude." ${vad[@]+"${vad[@]}"} -f "$1" 2>/dev/null \
+    | tr '\n' ' ' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
+}
+
+# Prints the text after the wake phrase, or nothing when the phrase is absent.
+extract_command() {
+  printf '%s' "$1" | perl -CSDA -ne \
+    'if (/^[\s\p{P}¿¡]*(?:oye|hey|ey)[\s\p{P}]+cl(?:au|ou?)de?\b[\s\p{P}]*(.*)$/i) { print $1 }'
+}
+
+# Succeeds when the text starts with the wake phrase, even if nothing follows it.
+has_wake_phrase() {
+  printf '%s' "$1" | perl -CSDA -ne \
+    'exit(/^[\s\p{P}¿¡]*(?:oye|hey|ey)[\s\p{P}]+cl(?:au|ou?)de?\b/i ? 0 : 1)'
+}
+
+# Phrases whisper tends to invent from silence or noise.
+is_hallucination() {
+  local lower
+  lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$lower" in
+    *"gracias por ver"*|*"subtítulos"*|*"subtitulos"*|*"suscríbete"*|*"suscribete"*|*"amara.org"*) return 0 ;;
+  esac
+  return 1
+}
+
+frontmost_app() {
+  osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' 2>/dev/null
+}
+
+send_to_terminal() {
+  local text="$1" saved
+  saved="$(pbpaste)"
+  printf '%s' "$text" | pbcopy
+  osascript -e 'tell application "System Events" to keystroke "v" using command down' \
+            -e 'delay 0.8' \
+            -e 'tell application "System Events" to key code 36'
+  sleep 0.3
+  printf '%s' "$saved" | pbcopy
+}
+
+# True when the output device is a headset, so our own speech cannot leak into the microphone.
+headset_output() {
+  SwitchAudioSource -c -t output 2>/dev/null | grep -Eiq "$HEADSET_RE"
+}
+
+# True while our own speech could leak into the mic: claude-speak (pidfile) or the macOS `say`
+# fallback is speaking through something other than a headset.
+speaking() {
+  local pid
+  pid="$(cat "$HOME/.cache/claude-voice/speaking.pid" 2>/dev/null)"
+  { [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; } || pgrep -x say >/dev/null || return 1
+  ! headset_output
+}
+
+# RMS amplitude (0..1) of a window of a wav file: window_rms file start seconds
+window_rms() {
+  sox "$1" -n trim "$2" "$3" stat 2>&1 | awk '/RMS +amplitude/ {print $3}'
+}
+
+# Measures room noise and speech level, then stores a threshold between them.
+calibrate() {
+  local pidfile="$HOME/.cache/claude-voice/pid"
+  if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+    echo "claude-voice is running: stop it first (/claude-voice off)." >&2
+    exit 1
+  fi
+  local amb="$WORKDIR/amb.wav" spk="$WORKDIR/spk.wav" i noise speech thr snr
+  echo "1/2 Stay quiet for 6 seconds, with the fan on as usual."
+  afplay /System/Library/Sounds/Tink.aiff; sleep 0.3
+  rec -q -r 16000 -c 1 -b 16 "$amb" trim 0 6 2>/dev/null
+  echo "2/2 After the next sound, say: 'Oye Claude, dime qué hora es' (4 seconds)."
+  afplay /System/Library/Sounds/Tink.aiff; sleep 0.3
+  rec -q -r 16000 -c 1 -b 16 "$spk" trim 0 4 2>/dev/null
+
+  # Noise: loudest half-second window (catches fan gusts).
+  noise="$(for i in 0 0.5 1 1.5 2 2.5 3 3.5 4 4.5 5 5.5; do window_rms "$amb" "$i" 0.5; done | sort -g | tail -1)"
+  # Speech: average of the louder half of the windows (skips the pauses).
+  speech="$(for i in 0 0.5 1 1.5 2 2.5 3 3.5; do window_rms "$spk" "$i" 0.5; done | sort -g | tail -4 \
+    | awk '{s+=$1} END {print s/NR}')"
+  thr="$(awk -v n="$noise" -v s="$speech" 'BEGIN { t=sqrt(n*s)*100; if (t<0.5) t=0.5; if (t>6) t=6; printf "%.1f%%", t }')"
+  snr="$(awk -v n="$noise" -v s="$speech" 'BEGIN { printf "%.1f", s/n }')"
+
+  awk -v n="$noise" -v s="$speech" 'BEGIN { printf "noise %.2f%%   speech %.2f%%\n", n*100, s*100 }'
+  echo "speech/noise ratio: ${snr}x"
+  if awk -v r="$snr" 'BEGIN { exit !(r < 2.5) }'; then
+    echo "WARNING: the ratio is low. Move the mic closer, raise the input volume or turn the fan off."
+  fi
+  mkdir -p "$(dirname "$CONF")"
+  # Replace only the threshold line: the file may also hold personal overrides.
+  { grep -v '^CLAUDE_VOICE_THRESHOLD=' "$CONF" 2>/dev/null; echo "CLAUDE_VOICE_THRESHOLD=$thr"; } >"$CONF.tmp"
+  mv "$CONF.tmp" "$CONF"
+  echo "threshold saved: $thr  ($CONF)"
+}
+
+if [ "${1:-}" = "--calibrate" ]; then
+  calibrate
+  exit 0
+fi
+
+if [ "${1:-}" = "--file" ]; then
+  text="$(transcribe "${2:?missing wav file}")"
+  echo "transcript: $text"
+  echo "command:    $(extract_command "$text")"
+  exit 0
+fi
+
+echo "Listening. Say 'Oye Claude, <instruction>'. Ctrl+C to quit."
+while true; do
+  # Never record while the notification hook is speaking.
+  while speaking; do sleep 0.5; done
+
+  rm -f "$WORKDIR/utt.wav"
+  # The recorder keeps a pre-roll buffer (so "Oye Claude" is never clipped).
+  "$HOME/.local/bin/claude-voice-rec" "$WORKDIR/utt.wav" "${START_THRESHOLD%\%}" "${THRESHOLD%\%}" "$SILENCE" 20
+  rc=$?
+  [ "$rc" -eq 3 ] && continue          # discarded: our own speech leaked into the mic
+  [ "$rc" -ne 0 ] && { sleep 1; continue; }
+  speaking && continue
+
+  # Keep the last 5 utterances locally to debug missed wake phrases.
+  mkdir -p "$KEEP_DIR"
+  cp "$WORKDIR/utt.wav" "$KEEP_DIR/utt-$(date +%H%M%S).wav"
+  ls -t "$KEEP_DIR"/utt-*.wav | tail -n +6 | xargs rm -f 2>/dev/null
+
+  text="$(transcribe "$WORKDIR/utt.wav")"
+  [ -z "$text" ] && continue
+
+  cmd="$(extract_command "$text")"
+  if [ -z "$cmd" ]; then
+    # "Oye Claude." on its own opens the conversation window for the next utterance.
+    if has_wake_phrase "$text"; then
+      echo "listening (wake phrase only, next ${WINDOW}s)"
+      last_sent="$(date +%s)"
+      continue
+    fi
+    # Conversation mode: follow-ups are accepted without the wake phrase for a while, counted
+    # from the later of our last send and the end of the reading of Claude's answer to it.
+    window_start="$last_sent"
+    spoke_at="$(cat "$SPOKE_AT" 2>/dev/null || echo 0)"
+    [ "$last_sent" -gt 0 ] && [ "$spoke_at" -gt "$last_sent" ] && window_start="$spoke_at"
+    if [ $(( $(date +%s) - window_start )) -le "$WINDOW" ] && ! is_hallucination "$text"; then
+      cmd="$text"
+    else
+      echo "ignored (no wake phrase): $text"
+      continue
+    fi
+  fi
+
+  app="$(frontmost_app | tr '[:upper:]' '[:lower:]')"
+  if [[ "$app" != *"$TARGET_APP"* ]]; then
+    echo "ignored (frontmost app is '$app', not '$TARGET_APP'): $cmd"
+    continue
+  fi
+
+  echo "sending: $cmd"
+  send_to_terminal "$cmd"
+  last_sent="$(date +%s)"
+done

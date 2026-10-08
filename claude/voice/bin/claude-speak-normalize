@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""Turn Claude's markdown answers into text that a Spanish TTS voice reads naturally.
+
+Reads text on stdin, writes speakable text on stdout.
+Usage: claude-speak-normalize [--max CHARS]
+
+Pipeline (order matters):
+  1. markdown structure -> sentences (code blocks dropped, tables read as phrases,
+     numbered lists read as "primero, segundo...")
+  2. pronunciation dictionary (English terms respelled), before identifiers are split
+  3. paths, identifiers, versions, dates, units, symbols -> words
+  4. acronyms spelled out letter by letter
+  5. whitespace and pauses tidied, then truncated at a sentence boundary
+"""
+import os
+import re
+import sys
+
+DICT_PATH = os.path.expanduser("~/.config/claude-voice/pronunciations.txt")
+
+ORDINALS = [
+    "primero", "segundo", "tercero", "cuarto", "quinto",
+    "sexto", "séptimo", "octavo", "noveno", "décimo",
+]
+MONTHS = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+    "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
+LETTERS = {
+    "A": "a", "B": "be", "C": "ce", "D": "de", "E": "e", "F": "efe", "G": "ge",
+    "H": "hache", "I": "i", "J": "jota", "K": "ka", "L": "ele", "M": "eme",
+    "N": "ene", "O": "o", "P": "pe", "Q": "cu", "R": "erre", "S": "ese", "T": "te",
+    "U": "u", "V": "uve", "W": "uve doble", "X": "equis", "Y": "i griega", "Z": "zeta",
+}
+UNITS = {
+    "ms": "milisegundos", "s": "segundos", "min": "minutos", "h": "horas",
+    "KB": "kilobytes", "MB": "megas", "GB": "gigas", "TB": "teras",
+    "px": "píxeles", "Hz": "hercios", "kHz": "kilohercios",
+}
+SYMBOLS = [
+    ("→", ", "), ("->", ", "), ("⇒", ", entonces "), ("←", ", desde "),
+    ("≥", " mayor o igual que "), (">=", " mayor o igual que "),
+    ("≤", " menor o igual que "), ("<=", " menor o igual que "),
+    ("!=", " distinto de "), ("≠", " distinto de "), ("==", " igual a "),
+    ("≈", " aproximadamente "), ("×", " por "), ("…", ". "),
+    ("—", ", "), ("–", ", "), ("&", " y "), ("@", " arroba "),
+    ("✅", ""), ("❌", ""), ("⚠️", ""), ("⚠", ""),
+]
+# Acronyms read as words, never spelled out.
+WORD_ACRONYMS = {"OK", "NASA", "UNIX", "LOL", "YAML", "SOLID", "CRUD", "REST", "OTAN"}
+
+
+def load_dictionary():
+    mapping = {}
+    try:
+        with open(DICT_PATH, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                mapping[key.strip().lower()] = value.strip()
+    except OSError:
+        pass
+    return mapping
+
+
+def markdown_to_sentences(text):
+    text = re.sub(r"```.*?```", " ", text, flags=re.S)             # code blocks
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)          # links, images
+    text = re.sub(r"<[^>\n]+>", " ", text)                          # html tags
+    lines = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if re.fullmatch(r"\|?[\s:|-]+\|?", stripped) and "-" in stripped:
+            continue                                                # table separator
+        if stripped.startswith("|") and stripped.endswith("|"):
+            cells = [c.strip() for c in stripped.strip("|").split("|") if c.strip()]
+            lines.append(", ".join(cells) + ".")
+            continue
+        if re.fullmatch(r"[-*_]{3,}", stripped):
+            continue                                                # horizontal rule
+        stripped = re.sub(r"^#{1,6}\s*", "", stripped)              # headings
+        stripped = re.sub(r"^>\s?", "", stripped)                   # quotes
+        numbered = re.match(r"^(\d{1,2})[.)]\s+(.*)", stripped)
+        if numbered and 1 <= int(numbered.group(1)) <= len(ORDINALS):
+            stripped = f"{ORDINALS[int(numbered.group(1)) - 1]}, {numbered.group(2)}"
+        stripped = re.sub(r"^[-*+]\s+", "", stripped)               # bullets
+        lines.append(stripped)
+    text = "\n".join(lines)
+    text = re.sub(r"\*\*|__|(?<!\w)[*_](?=\S)|(?<=\S)[*_](?!\w)|~~", "", text)  # emphasis
+    return text
+
+
+def apply_dictionary(text, mapping):
+    if not mapping:
+        return text
+    keys = sorted(mapping, key=len, reverse=True)
+    pattern = re.compile(r"(?<![\w/])(" + "|".join(re.escape(k) for k in keys) + r")(?!\w)", re.I)
+    return pattern.sub(lambda m: mapping[m.group(1).lower()], text)
+
+
+def split_identifier(word):
+    if word.isupper():
+        return word.replace("_", " ").lower()
+    word = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", word)            # camelCase
+    word = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", word)           # HTTPServer
+    return re.sub(r"[_]+", " ", word)
+
+
+def speak_path(match):
+    path = match.group(0).rstrip("/")
+    name = path.split("/")[-1] or path
+    return name
+
+
+def speak_version(match):
+    prefix, number = match.group(1), match.group(2)
+    words = " punto ".join(number.split("."))
+    return ("versión " if prefix else "") + words
+
+
+def speak_decimal(match):
+    return f"{match.group(1)} coma {match.group(2)}"
+
+
+def speak_date(match):
+    day, month, year = int(match.group(1)), int(match.group(2)), match.group(3)
+    if not 1 <= month <= 12:
+        return match.group(0)
+    return f"{day} de {MONTHS[month - 1]} de {year}"
+
+
+def speak_unit(match):
+    return f"{match.group(1)} {UNITS[match.group(2)]}"
+
+
+def spell_acronym(match):
+    word = match.group(0)
+    if word in WORD_ACRONYMS:
+        return word.lower()
+    plural = word.endswith("s") and word[:-1].isupper()
+    letters = word[:-1] if plural else word
+    spoken = " ".join(LETTERS.get(ch, ch) for ch in letters)
+    return spoken + ("s" if plural else "")
+
+
+def normalize(text, mapping):
+    text = markdown_to_sentences(text)
+    text = re.sub(r"`([^`]*)`", r"\1", text)                        # inline code
+    text = re.sub(r"https?://([^/\s]+)\S*", r"\1", text)            # URLs -> domain
+    text = apply_dictionary(text, mapping)
+
+    # Dates first, so they are not taken for paths.
+    text = re.sub(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b", speak_date, text)
+    text = re.sub(r"(\d)\s*(?:→|->)\s*(\d)", r"\1 a \2", text)
+    # Paths: keep only the last element (~/.local/bin/claude-voice -> claude-voice).
+    text = re.sub(r"(?<![\w.~])(?:[~.]{1,2}/|/)(?:[\w.@-]+/)*[\w.@-]+|\b(?:[\w.@-]+/){2,}[\w.@-]*", speak_path, text)
+    text = re.sub(r"\b(\d{1,2}):(\d{2})\b", lambda m: f"{int(m.group(1))} {m.group(2)}", text)
+    # Versions (3+ parts, or v-prefixed) and decimals.
+    text = re.sub(r"\b(v)?(\d+(?:\.\d+){2,})\b", speak_version, text)
+    text = re.sub(r"\b(v)(\d+\.\d+)\b", speak_version, text)
+    text = re.sub(r"\b(\d+)[.,](\d+)(?!\d)", speak_decimal, text)
+    # Units and percentages.
+    unit_re = "|".join(sorted(map(re.escape, UNITS), key=len, reverse=True))
+    text = re.sub(rf"\b(\d+(?: coma \d+)?)\s?({unit_re})\b", speak_unit, text)
+    text = re.sub(r"(\d)\s?%", r"\1 por ciento", text)
+    text = re.sub(r"#(\d+)", r"número \1", text)
+    text = re.sub(r"(?<=\s)~(?=\s?\d)", "aproximadamente ", text)
+    text = re.sub(r"(\d)\s?x\b", r"\1 veces", text)
+    # File names and identifiers.
+    text = re.sub(r"\b([\w-]+)\.(java|md|sh|py|json|yaml|yml|xml|ts|js|txt|sql|wav|properties)\b",
+                  r"\1 punto \2", text)
+    text = re.sub(r"\b[A-Za-z]+(?:[_][A-Za-z0-9]+)+\b|\b[a-z]+(?:[A-Z][a-z0-9]+)+\b|\b(?:[A-Z][a-z0-9]+){2,}\b",
+                  lambda m: split_identifier(m.group(0)), text)
+    text = re.sub(r"(?<=[A-Za-zÀ-ÿ])-(?=[A-Za-zÀ-ÿ])", " ", text)  # kebab-case
+    text = re.sub(r"(?<=\w)/(?=\w)", " o ", text)                    # on/off
+    for symbol, spoken in SYMBOLS:
+        text = text.replace(symbol, spoken)
+    # Acronyms (2-5 capitals, optional plural s) spelled out.
+    text = re.sub(r"\b[A-Z]{2,5}s?\b", spell_acronym, text)
+
+    # Pauses: parentheses and line ends become commas and full stops.
+    text = re.sub(r"\s*\(([^)]*)\)", r", \1,", text)
+    text = re.sub(r"[\"“”«»]", "", text)
+    text = text.replace(";", ".")
+    text = re.sub(r"(?<=[^.!?:,\s])[ \t]*\n+", ". ", text)
+    text = re.sub(r"[^\w\s.,:;!?¿¡'áéíóúüñÁÉÍÓÚÜÑ-]", " ", text)   # leftover symbols, emoji
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+([.,:!?])", r"\1", text)
+    text = re.sub(r",\s*\.", ".", text)
+    text = re.sub(r"([.,:!?])(?:\s*[.,])+", r"\1", text)
+    text = re.sub(r"^[\s.,]+", "", text)
+    return text.strip()
+
+
+def truncate(text, limit):
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! "))
+    if end > limit * 0.5:
+        cut = cut[: end + 1]
+    return cut.rstrip() + " El resto está en pantalla."
+
+
+def main():
+    limit = 0
+    if len(sys.argv) > 2 and sys.argv[1] == "--max":
+        limit = int(sys.argv[2])
+    text = normalize(sys.stdin.read(), load_dictionary())
+    if limit:
+        text = truncate(text, limit)
+    sys.stdout.write(text)
+
+
+if __name__ == "__main__":
+    main()
