@@ -83,6 +83,41 @@ backup_if_real() {
     fi
 }
 
+# Optionally install a package with the system package manager (brew / apt-get / pacman).
+# Usage: pkg_install <label> <brew-pkg> <apt-pkg> <pacman-pkg>
+# Asks for consent (default No) and only when stdin is a TTY. Returns 0 only if the user
+# accepted and the install succeeded; otherwise warns with the manual command and returns 1.
+pkg_install() {
+    local label="$1" brew_pkg="$2" apt_pkg="$3" pacman_pkg="$4" cmd=""
+    if [ "$OS_TYPE" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+        cmd="brew install $brew_pkg"
+    elif command -v apt-get >/dev/null 2>&1; then
+        cmd="sudo apt-get install -y $apt_pkg"
+    elif command -v pacman >/dev/null 2>&1; then
+        cmd="sudo pacman -S --noconfirm $pacman_pkg"
+    else
+        echo "No supported package manager (brew/apt-get/pacman) found: install $label manually."
+        return 1
+    fi
+
+    local reply="n"
+    if [ -t 0 ]; then
+        read -r -p "Install $label via '$cmd'? [y/N] " reply
+    else
+        echo "Non-interactive shell: skipping $label install. Run '$cmd' manually if you want it."
+        return 1
+    fi
+    case "$reply" in
+        [Yy]*)
+            $cmd || { echo "$label install failed; run: $cmd"; return 1; }
+            ;;
+        *)
+            echo "Skipping $label. Install it manually with: $cmd"
+            return 1
+            ;;
+    esac
+}
+
 backup_if_real "$HOME/.zshrc"
 backup_if_real "$HOME/.p10k.zsh"
 
@@ -94,6 +129,9 @@ ln -sf "$SCRIPT_DIR/.p10k.zsh" "$HOME/.p10k.zsh"
 # Claude Code statusline
 mkdir -p "$HOME/.claude"
 ln -sf "$SCRIPT_DIR/claude/statusline.sh" "$HOME/.claude/statusline.sh"
+if ! command -v jq >/dev/null 2>&1; then
+    pkg_install jq jq jq jq || true
+fi
 if command -v jq >/dev/null 2>&1; then
     SETTINGS="$HOME/.claude/settings.json"
     [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
@@ -102,9 +140,6 @@ if command -v jq >/dev/null 2>&1; then
     echo "Claude Code statusline wired into $SETTINGS"
 else
     echo "jq not found: add this to ~/.claude/settings.json manually"
-    if [ "$OS_TYPE" = "Linux" ]; then
-        echo "  install it with: sudo apt install jq"
-    fi
     echo '  "statusLine": { "type": "command", "command": "bash \"$HOME/.claude/statusline.sh\"" }'
 fi
 
