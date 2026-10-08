@@ -174,3 +174,9 @@ if [[ ! -f "$HOME/.no-herdr" ]] && [[ $- == *i* ]] && command -v "$WM_CMD" >/dev
     fi
     exec $WM_CMD
 fi
+
+# Opt-in Herdr spaces (HERDR_AUTO_WORKSPACES=1): chpwd hook + agent wrapper. ~/.zshrc is a symlink
+# into the repo, so resolve the real directory of this file to find herdr/workspaces.zsh.
+__herdr_ws_file="${${(%):-%x}:A:h}/herdr/workspaces.zsh"
+[[ -r "$__herdr_ws_file" ]] && source "$__herdr_ws_file"
+unset __herdr_ws_file
