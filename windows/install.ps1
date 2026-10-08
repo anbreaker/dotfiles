@@ -216,8 +216,8 @@ if (Get-Command herdr -ErrorAction SilentlyContinue) {
             Write-Host "  Herdr plugin $Label already installed"; return
         }
         if (Read-YesNo "Install Herdr plugin $Label via '$cmd'?") {
-            try { & herdr plugin install $Repo --ref $Ref }
-            catch { Write-Warning "Herdr plugin $Label install failed; run: $cmd" }
+            & herdr plugin install $Repo --ref $Ref
+            if ($LASTEXITCODE -ne 0) { Write-Warning "Herdr plugin $Label install failed; run: $cmd" }
         } else {
             Write-Host "Skipping Herdr plugin $Label. Install it manually with: $cmd"
         }
@@ -229,11 +229,10 @@ if (Get-Command herdr -ErrorAction SilentlyContinue) {
     if (-not $autoTitleInstalled -and -not (Get-Command go -ErrorAction SilentlyContinue)) {
         Write-Host "The Herdr auto-title plugin needs Go to build."
         if (Read-YesNo "Install Go via 'winget install -e --id GoLang.Go'?") {
-            try {
-                Install-WingetPackage 'GoLang.Go'
-                $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
-                            [Environment]::GetEnvironmentVariable('Path', 'User')
-            } catch { Write-Warning "Go install failed; run: winget install -e --id GoLang.Go" }
+            Install-WingetPackage 'GoLang.Go'
+            if ($LASTEXITCODE -ne 0) { Write-Warning "Go install failed; run: winget install -e --id GoLang.Go" }
+            $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                        [Environment]::GetEnvironmentVariable('Path', 'User')
         } else {
             Write-Host "Skipping Go. Install it manually with: winget install -e --id GoLang.Go"
         }
