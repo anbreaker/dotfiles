@@ -155,10 +155,21 @@ if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; fi
 export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
 export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
 
+# Optional machine-local overrides (e.g. export HERDR_SESSION_PER_PATH=1), kept outside the repo.
+[ -f ~/.zshrc.local ] && source ~/.zshrc.local
+
 # Auto-attach a Herdr en cada terminal nueva (Ghostty, Terminal.app, etc.)
 # Rollback: comentar o borrar este bloque y abrir una pestaña nueva.
 WM_VAR="$HERDR_ENV"
 WM_CMD="herdr"
 if [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
+    if [[ "$HERDR_SESSION_PER_PATH" == "1" ]]; then
+        # Opt-in: one Herdr session per directory. The name is the slugified basename plus a short
+        # hash of the full path (avoids collisions between same-named folders) and is stable per
+        # path, so reopening a terminal in the same directory reattaches to the same session.
+        __herdr_slug="$(basename "$PWD" | tr -c 'a-zA-Z0-9' '-' | tr -s '-' | sed 's/^-//;s/-$//')"
+        __herdr_hash="$(printf '%s' "$PWD" | cksum | cut -d' ' -f1 | cut -c1-6)"
+        exec $WM_CMD --session "${__herdr_slug:-root}-${__herdr_hash}"
+    fi
     exec $WM_CMD
 fi
