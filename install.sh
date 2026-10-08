@@ -243,6 +243,24 @@ if command -v herdr >/dev/null 2>&1; then
     herdr_plugin_install "reviewr (code review pane)" persiyanov/herdr-reviewr 4c090225af706bf3aaa24b39fea890a72994f40f
 fi
 
+# Optional: one Herdr session per directory. Opt-in via HERDR_SESSION_PER_PATH in ~/.zshrc.local
+# (sourced by .zshrc before the auto-attach block). Default behavior stays a single shared session.
+if command -v herdr >/dev/null 2>&1; then
+    SESSION_LINE='export HERDR_SESSION_PER_PATH=1'
+    if grep -qsF "$SESSION_LINE" "$HOME/.zshrc.local"; then
+        echo "Per-directory Herdr sessions already enabled in ~/.zshrc.local."
+    elif [ -t 0 ]; then
+        read -r -p "Use one Herdr session per directory (a new space for each project path)? [y/N] " SESSION_REPLY
+        case "$SESSION_REPLY" in
+            [Yy]*) echo "$SESSION_LINE" >> "$HOME/.zshrc.local" && echo "Enabled per-directory Herdr sessions in ~/.zshrc.local." \
+                || echo "Could not write ~/.zshrc.local; add this line manually: $SESSION_LINE" ;;
+            *) echo "Keeping a single shared Herdr session. To enable per-directory sessions later, add to ~/.zshrc.local: $SESSION_LINE" ;;
+        esac
+    else
+        echo "Non-interactive shell: keeping a single shared Herdr session. To enable per-directory sessions, add to ~/.zshrc.local: $SESSION_LINE"
+    fi
+fi
+
 if command -v herdr >/dev/null 2>&1 && command -v claude >/dev/null 2>&1; then
     herdr integration install claude || true
 fi

@@ -164,5 +164,13 @@ export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
 WM_VAR="$HERDR_ENV"
 WM_CMD="herdr"
 if [[ ! -f "$HOME/.no-herdr" ]] && [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
+    if [[ "$HERDR_SESSION_PER_PATH" == "1" ]]; then
+        # Opt-in: one Herdr session per directory. The name is the slugified basename plus a short
+        # hash of the full path (avoids collisions between same-named folders) and is stable per
+        # path, so reopening a terminal in the same directory reattaches to the same session.
+        __herdr_slug="$(basename "$PWD" | tr -c 'a-zA-Z0-9' '-' | tr -s '-' | sed 's/^-//;s/-$//')"
+        __herdr_hash="$(printf '%s' "$PWD" | cksum | cut -d' ' -f1 | cut -c1-6)"
+        exec $WM_CMD --session "${__herdr_slug:-root}-${__herdr_hash}"
+    fi
     exec $WM_CMD
 fi
