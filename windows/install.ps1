@@ -197,17 +197,26 @@ if (Get-Command herdr -ErrorAction SilentlyContinue) {
     $herdrConfigDir = Join-Path $HOME '.config\herdr'
     $herdrConfigSrc = Join-Path $scriptDir '..\herdr\config.toml'
     $herdrConfigDst = Join-Path $herdrConfigDir 'config.toml'
-    New-Item -ItemType Directory -Path $herdrConfigDir -Force | Out-Null
-    if ((Test-Path $herdrConfigDst) -and -not (Get-Item $herdrConfigDst).LinkType) {
-        Write-Host "Backing up existing $herdrConfigDst to $herdrConfigDst.backup"
-        Copy-Item $herdrConfigDst "$herdrConfigDst.backup" -Force
-    }
-    try {
-        New-Item -ItemType SymbolicLink -Path $herdrConfigDst -Target $herdrConfigSrc -Force -ErrorAction Stop | Out-Null
-        Write-Host "Linked Herdr config -> $herdrConfigSrc"
-    } catch {
-        Copy-Item $herdrConfigSrc $herdrConfigDst -Force
-        Write-Host "Copied Herdr config (symlink needs Developer Mode/admin) -> $herdrConfigDst"
+    $herdrConfigItem = Get-Item $herdrConfigDst -ErrorAction SilentlyContinue
+    $herdrConfigLinked = $herdrConfigItem -and $herdrConfigItem.LinkType -and
+        ($herdrConfigItem.Target -contains (Resolve-Path $herdrConfigSrc).Path)
+    if ($herdrConfigLinked) {
+        Write-Host "Herdr config already linked."
+    } elseif (Read-YesNo "Link the Herdr config ($herdrConfigSrc -> $herdrConfigDst)? An existing config is backed up and replaced by the repo's theme and panel settings.") {
+        New-Item -ItemType Directory -Path $herdrConfigDir -Force | Out-Null
+        if ((Test-Path $herdrConfigDst) -and -not (Get-Item $herdrConfigDst).LinkType) {
+            Write-Host "Backing up existing $herdrConfigDst to $herdrConfigDst.backup"
+            Copy-Item $herdrConfigDst "$herdrConfigDst.backup" -Force
+        }
+        try {
+            New-Item -ItemType SymbolicLink -Path $herdrConfigDst -Target $herdrConfigSrc -Force -ErrorAction Stop | Out-Null
+            Write-Host "Linked Herdr config -> $herdrConfigSrc"
+        } catch {
+            Copy-Item $herdrConfigSrc $herdrConfigDst -Force
+            Write-Host "Copied Herdr config (symlink needs Developer Mode/admin) -> $herdrConfigDst"
+        }
+    } else {
+        Write-Host "Skipping Herdr config. Link it later by copying $herdrConfigSrc to $herdrConfigDst."
     }
 
     function Install-HerdrPlugin([string]$Label, [string]$Repo, [string]$Ref) {
