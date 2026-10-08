@@ -190,6 +190,11 @@ elif [ "$OS_TYPE" = "Linux" ]; then
             [Yy]*)
                 echo "Installing herdr..."
                 curl -fsSL https://herdr.dev/install.sh | sh || echo "herdr install failed; run: curl -fsSL https://herdr.dev/install.sh | sh"
+                # The installer drops the binary in ~/.local/bin, which may not be on PATH yet for this run;
+                # without it every later `command -v herdr` step (config, plugins, sessions) would be skipped.
+                if [ -x "$HOME/.local/bin/herdr" ]; then
+                    export PATH="$HOME/.local/bin:$PATH"
+                fi
                 ;;
             *)
                 echo "Skipping herdr. The auto-attach block in .zshrc will no-op until you install it manually (https://herdr.dev)."
@@ -229,16 +234,24 @@ herdr_plugin_install() {
 }
 
 if command -v herdr >/dev/null 2>&1; then
-    # auto-title builds from source, so it needs Go.
+    # auto-title builds from source and needs Go 1.24+ (distro packages are often older, e.g. Ubuntu 24.04 ships 1.22).
+    go_is_recent_enough() {
+        local ver
+        ver="$(go version 2>/dev/null | sed -n 's/.*go\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')"
+        [ -n "$ver" ] && [ "$(printf '%s\n1.24\n' "$ver" | sort -V | head -n1)" = "1.24" ]
+    }
     AUTO_TITLE_CMD="herdr plugin install kryptamine/herdr-auto-title --ref 899ee4e4c827129c9920c105f250628ff967ca98"
-    if ! command -v go >/dev/null 2>&1 && ! herdr plugin list 2>/dev/null | grep -q "github:kryptamine/herdr-auto-title@"; then
-        echo "The Herdr auto-title plugin needs Go to build."
+    AUTO_TITLE_INSTALLED=0
+    herdr plugin list 2>/dev/null | grep -q "github:kryptamine/herdr-auto-title@" && AUTO_TITLE_INSTALLED=1
+    if [ "$AUTO_TITLE_INSTALLED" -eq 0 ] && ! command -v go >/dev/null 2>&1; then
+        echo "The Herdr auto-title plugin needs Go 1.24+ to build."
         pkg_install Go go golang go || true
     fi
-    if command -v go >/dev/null 2>&1 || herdr plugin list 2>/dev/null | grep -q "github:kryptamine/herdr-auto-title@"; then
+    if [ "$AUTO_TITLE_INSTALLED" -eq 1 ] || go_is_recent_enough; then
         herdr_plugin_install "auto-title (automatic tab titles)" kryptamine/herdr-auto-title 899ee4e4c827129c9920c105f250628ff967ca98
     else
-        echo "Go not available: skipping Herdr plugin auto-title. After installing Go, run: $AUTO_TITLE_CMD"
+        echo "Go 1.24+ not available (found: $(go version 2>/dev/null || echo none)): skipping Herdr plugin auto-title."
+        echo "  Install a recent Go (https://go.dev/dl) and then run: $AUTO_TITLE_CMD"
     fi
     herdr_plugin_install "reviewr (code review pane)" persiyanov/herdr-reviewr 4c090225af706bf3aaa24b39fea890a72994f40f
 fi
