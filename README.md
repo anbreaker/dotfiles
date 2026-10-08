@@ -205,13 +205,44 @@ on decline, non-interactive runs or failure it prints the exact manual command a
   | Arch | pacman | `sudo pacman -S --noconfirm <pkg>` |
   | Windows | winget | `winget install -e --id GoLang.Go` |
 
+- **Spaces vs sessions** — Herdr has two different levels, and the two opt-ins below act on different ones:
+
+  | | Space (workspace) | Session |
+  | --- | --- | --- |
+  | What it is | a `herdr workspace`, created inside the session you are already in | a separate Herdr server (`herdr --session <name>`) |
+  | Opt-in flag | `HERDR_AUTO_WORKSPACES=1` | `HERDR_SESSION_PER_PATH=1` |
+  | Visibility | all spaces live side by side in the same session | each session only sees its own workspaces |
+  | Defined in | `herdr/workspaces.zsh` | the auto-attach block in `.zshrc` |
+
+  Both flags go in `~/.zshrc.local`, which `.zshrc` sources before the auto-attach block. Both default
+  to off, and `install.sh` offers each one with its own `[y/N]` prompt (TTY only).
+
 - **Per-directory sessions (opt-in)** — by default every new terminal runs plain `herdr` (one shared
   session), exactly as before. If you answer yes to the prompt in `install.sh` (or add
   `export HERDR_SESSION_PER_PATH=1` to `~/.zshrc.local` yourself), `.zshrc` runs
   `herdr --session <folder-slug>-<6-char-hash-of-path>` instead, so each project directory gets its
-  own session and reopening a terminal there reattaches to it. `.zshrc` now sources
+  own separate session (its own server) and reopening a terminal there reattaches to it. Workspaces
+  are not shared between these sessions. `.zshrc` now sources
   `~/.zshrc.local` (if present) before the auto-attach block; keep personal settings there. On
   Windows this zsh variable does not apply (no code in `install.ps1`).
+- **Auto-created spaces (opt-in)** — with `export HERDR_AUTO_WORKSPACES=1` in `~/.zshrc.local` (or by
+  answering yes to the `install.sh` prompt), `.zshrc` sources `herdr/workspaces.zsh` (resolved through
+  the `~/.zshrc` symlink, so it works from the repo). It needs **zsh and `jq`**, and only acts inside
+  Herdr (`HERDR_ENV` set); without the flag nothing is defined. It adds two things, both creating
+  spaces in the *current* session with `herdr workspace create`:
+  - **`cd` hook** — when you `cd` into a different git root, a space labelled with the repo folder
+    name is created, unless one with that label already exists. Moving around inside the same project
+    does nothing.
+  - **Agent wrapper** — `claude`, `agy`, `grok` and `opencode` launched interactively (no args, or
+    flags only) from a project other than the current space's open a new space rooted there and run
+    the agent in it. Same project, `-p/--print`, `--version`, `--help` and positional prompts or
+    subcommands run in place. Bypass a single call with `command claude`.
+
+  Both use `--focus`, so Herdr **moves your focus to the new space**; delete `--focus` in
+  `herdr/workspaces.zsh` to create spaces in the background. The helper `__herdr_agent_redirect <cmd> "$@"`
+  is reusable: machine-specific wrappers (for example a `gemini` one with your own env or NVM setup)
+  are not included and belong in `~/.zshrc.local`, calling that function and falling back to
+  `command <cmd>`. Rollback: remove the flag and open a new terminal.
 - **Windows is untested** — `windows/install.ps1` has the equivalent config link (assumes
   `%USERPROFILE%\.config\herdr`), the same two pinned plugins with a `Read-Host` consent, and Go via
   `winget` (`GoLang.Go`), but none of it has been run on a real Windows machine.
