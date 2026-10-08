@@ -204,10 +204,33 @@ elif [ "$OS_TYPE" = "Linux" ]; then
 fi
 
 if command -v herdr >/dev/null 2>&1; then
-    # Herdr config (theme, notifications). A real file is backed up before being replaced by the symlink.
-    mkdir -p "$HOME/.config/herdr"
-    backup_if_real "$HOME/.config/herdr/config.toml"
-    ln -sf "$SCRIPT_DIR/herdr/config.toml" "$HOME/.config/herdr/config.toml"
+    # Herdr config (theme, notifications). Optional: asks first (default No, TTY only), because it
+    # replaces any existing config. A real file is backed up before being replaced by the symlink.
+    HERDR_CFG_SRC="$SCRIPT_DIR/herdr/config.toml"
+    HERDR_CFG_DST="$HOME/.config/herdr/config.toml"
+    HERDR_CFG_CMD="mkdir -p ~/.config/herdr && ln -sf '$HERDR_CFG_SRC' ~/.config/herdr/config.toml"
+    if [ -L "$HERDR_CFG_DST" ] && [ "$(readlink "$HERDR_CFG_DST")" = "$HERDR_CFG_SRC" ]; then
+        echo "Herdr config already linked."
+    else
+        herdr_cfg_reply="n"
+        if [ -t 0 ]; then
+            read -r -p "Link the Herdr config to $HERDR_CFG_DST? An existing config is backed up and replaced by this repo's theme/panel settings. [y/N] " herdr_cfg_reply
+        else
+            echo "Non-interactive shell: skipping Herdr config. Run '$HERDR_CFG_CMD' manually if you want it."
+        fi
+        case "$herdr_cfg_reply" in
+            [Yy]*)
+                mkdir -p "$HOME/.config/herdr"
+                backup_if_real "$HERDR_CFG_DST"
+                ln -sf "$HERDR_CFG_SRC" "$HERDR_CFG_DST"
+                ;;
+            *)
+                if [ -t 0 ]; then
+                    echo "Skipping Herdr config. Link it manually with: $HERDR_CFG_CMD"
+                fi
+                ;;
+        esac
+    fi
 fi
 
 # Herdr plugins, pinned by commit. Each one is optional and asks for consent (default No, TTY only).

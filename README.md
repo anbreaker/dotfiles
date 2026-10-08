@@ -183,10 +183,15 @@ remove those manually if you uninstall.
 #### Herdr config, plugins and package managers
 
 Everything here is **optional**: each step asks `[y/N]` (default No), only when stdin is a TTY, and
-on decline, non-interactive runs or failure it prints the exact manual command and continues.
+on decline, non-interactive runs or failure it prints the exact manual command and continues. A step that
+is already done (config already linked, plugin already installed) is skipped without asking. The
+exception is `windows/install.ps1`, which still links the config without asking (it backs up a real
+file first).
 
-- **Config** — if `herdr` is installed, `herdr/config.toml` is linked to `~/.config/herdr/config.toml`
-  (a real existing file is backed up to `config.toml.backup` first). Rollback: delete the symlink.
+- **Config** — if `herdr` is installed, `install.sh` asks before linking `herdr/config.toml` to
+  `~/.config/herdr/config.toml`. Accepting replaces any existing config with this repo's theme/panel
+  settings (a real existing file is backed up to `config.toml.backup` first). If the target already
+  links to the repo file it prints "already linked" and does not ask. Rollback: delete the symlink.
 - **Plugins** (pinned by commit, skipped if already in `herdr plugin list`):
 
   | Plugin | Purpose | Command |
