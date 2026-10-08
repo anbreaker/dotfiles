@@ -263,7 +263,7 @@ if command -v herdr >/dev/null 2>&1; then
     if grep -qsF "$SESSION_LINE" "$HOME/.zshrc.local"; then
         echo "Per-directory Herdr sessions already enabled in ~/.zshrc.local."
     elif [ -t 0 ]; then
-        read -r -p "Use one Herdr session per directory (a new space for each project path)? [y/N] " SESSION_REPLY
+        read -r -p "Use one separate Herdr session (own server) per directory? [y/N] " SESSION_REPLY
         case "$SESSION_REPLY" in
             [Yy]*) echo "$SESSION_LINE" >> "$HOME/.zshrc.local" && echo "Enabled per-directory Herdr sessions in ~/.zshrc.local." \
                 || echo "Could not write ~/.zshrc.local; add this line manually: $SESSION_LINE" ;;
@@ -271,6 +271,31 @@ if command -v herdr >/dev/null 2>&1; then
         esac
     else
         echo "Non-interactive shell: keeping a single shared Herdr session. To enable per-directory sessions, add to ~/.zshrc.local: $SESSION_LINE"
+    fi
+fi
+
+# Optional: auto-create a Herdr space (workspace) inside the current session. Opt-in via
+# HERDR_AUTO_WORKSPACES in ~/.zshrc.local (herdr/workspaces.zsh is sourced by .zshrc). Needs jq.
+if command -v herdr >/dev/null 2>&1; then
+    WS_LINE='export HERDR_AUTO_WORKSPACES=1'
+    if grep -qsF "$WS_LINE" "$HOME/.zshrc.local"; then
+        echo "Auto-created Herdr spaces already enabled in ~/.zshrc.local."
+    elif [ -t 0 ]; then
+        read -r -p "Auto-create a Herdr space (workspace) when you cd into another project or launch an agent from one? Needs jq. [y/N] " WS_REPLY
+        case "$WS_REPLY" in
+            [Yy]*)
+                command -v jq >/dev/null 2>&1 || pkg_install jq jq jq jq || true
+                if command -v jq >/dev/null 2>&1; then
+                    echo "$WS_LINE" >> "$HOME/.zshrc.local" && echo "Enabled auto-created Herdr spaces in ~/.zshrc.local." \
+                        || echo "Could not write ~/.zshrc.local; add this line manually: $WS_LINE"
+                else
+                    echo "WARNING: jq is missing, so auto-created spaces would do nothing. Install jq (e.g. 'brew install jq' or 'sudo apt-get install -y jq'), then add to ~/.zshrc.local: $WS_LINE"
+                fi
+                ;;
+            *) echo "Not auto-creating Herdr spaces. To enable later (needs jq), add to ~/.zshrc.local: $WS_LINE" ;;
+        esac
+    else
+        echo "Non-interactive shell: not auto-creating Herdr spaces. To enable (needs jq), add to ~/.zshrc.local: $WS_LINE"
     fi
 fi
 
