@@ -163,6 +163,13 @@ elif [ "$OS_TYPE" = "Linux" ]; then
     fi
 fi
 
+if command -v herdr >/dev/null 2>&1; then
+    # Herdr config (theme, notifications). A real file is backed up before being replaced by the symlink.
+    mkdir -p "$HOME/.config/herdr"
+    backup_if_real "$HOME/.config/herdr/config.toml"
+    ln -sf "$SCRIPT_DIR/herdr/config.toml" "$HOME/.config/herdr/config.toml"
+fi
+
 if command -v herdr >/dev/null 2>&1 && command -v claude >/dev/null 2>&1; then
     herdr integration install claude || true
 fi

@@ -1,0 +1,21 @@
+# Herdr configuration (https://herdr.dev), linked to ~/.config/herdr/config.toml by install.sh.
+# To roll back, delete the symlink (or this file) to return to Herdr's defaults.
+
+# Skip the first-run onboarding screen.
+onboarding = false
+
+[ui]
+# Order the agent panel by priority instead of creation order.
+agent_panel_sort = "priority"
+
+[ui.toast]
+# Use native system notifications when an agent changes state (idle/working/blocked).
+delivery = "system"
+
+# Herdr defaults that are intentionally left untouched:
+#   [ui.sound] enabled = true
+#   prompt_new_tab_name = true (new tabs ask for a name instead of staying numbered)
+
+[theme]
+name = "one-dark"
+auto_switch = false
