@@ -9,6 +9,7 @@ Personal zsh, terminal and Claude Code configuration.
 - `Basic.terminal` - Terminal.app profile (colors, font, cursor)
 - `ghostty/config.ghostty` - Ghostty terminal config
 - `claude/statusline.sh` - Claude Code statusline (powerline + rate limits bar)
+- `herdr/config.toml` - Herdr config (theme, notifications), linked to `~/.config/herdr/config.toml`
 - `windows/` - PowerShell equivalent for Windows (Oh My Posh + PSReadLine + posh-git)
 
 ### Plugins
@@ -82,12 +83,13 @@ Notes:
 
 - Ghostty itself isn't installed by the script (same as on macOS) — install it separately from
   https://ghostty.org before running `install.sh`, otherwise the config just sits there unused.
-- `jq` is needed for the Claude Code statusline wiring. If missing, `install.sh` offers to install
-  it via `sudo apt-get install jq` (prompts for confirmation, same pattern as the Herdr prompt).
-  Answering "n" or running non-interactively skips it — add the `statusLine` block manually (see
-  below) or re-run `install.sh` later.
-- Tested on Ubuntu; other Debian-based distros with `apt` should work the same for the manual
-  steps above, but the script itself doesn't special-case them beyond the generic `Linux` branch.
+- `jq` is needed for the Claude Code statusline wiring; if missing, `install.sh` offers to install it
+  (see [Herdr config, plugins and package managers](#herdr-config-plugins-and-package-managers)), or run
+  `sudo apt install jq` yourself and re-run `install.sh`, or add the `statusLine` block manually (see
+  below).
+- Tested on Ubuntu. Debian-based distros (e.g. Parrot) use the same `apt-get` path, and Arch uses
+  `pacman`; the optional installs below are detected by package manager, not by distro name.
+  Parrot and Arch are not tested.
 - Herdr installs silently on macOS (via brew) but **prompts for confirmation on Linux** before
   running its installer, since it changes how every new terminal behaves (auto-attach). Answering
   "n", pressing enter, or running `install.sh` non-interactively (no TTY on stdin) all skip it —
@@ -178,3 +180,39 @@ Requires `brew install herdr` on macOS, or `curl -fsSL https://herdr.dev/install
 
 `brew uninstall herdr` removes the binary but leaves the `.zshrc` block and the hook in place —
 remove those manually if you uninstall.
+
+#### Herdr config, plugins and package managers
+
+Everything here is **optional**: each step asks `[y/N]` (default No), only when stdin is a TTY, and
+on decline, non-interactive runs or failure it prints the exact manual command and continues.
+
+- **Config** — if `herdr` is installed, `herdr/config.toml` is linked to `~/.config/herdr/config.toml`
+  (a real existing file is backed up to `config.toml.backup` first). Rollback: delete the symlink.
+- **Plugins** (pinned by commit, skipped if already in `herdr plugin list`):
+
+  | Plugin | Purpose | Command |
+  | --- | --- | --- |
+  | `kryptamine/herdr-auto-title` | automatic tab titles; **builds with Go** | `herdr plugin install kryptamine/herdr-auto-title --ref 899ee4e4c827129c9920c105f250628ff967ca98` |
+  | `persiyanov/herdr-reviewr` | code review pane | `herdr plugin install persiyanov/herdr-reviewr --ref 4c090225af706bf3aaa24b39fea890a72994f40f` |
+
+  If `go` is missing, `install.sh` offers to install it first; without Go the auto-title plugin is skipped.
+- **Package managers** — `jq` and `go` are installed through whichever of these is found, after showing
+  the exact command and asking first:
+
+  | OS | Manager | Command |
+  | --- | --- | --- |
+  | macOS | Homebrew | `brew install <pkg>` |
+  | Ubuntu / Debian / Parrot | apt | `sudo apt-get install -y <pkg>` (Go is `golang`) |
+  | Arch | pacman | `sudo pacman -S --noconfirm <pkg>` |
+  | Windows | winget | `winget install -e --id GoLang.Go` |
+
+- **Per-directory sessions (opt-in)** — by default every new terminal runs plain `herdr` (one shared
+  session), exactly as before. If you answer yes to the prompt in `install.sh` (or add
+  `export HERDR_SESSION_PER_PATH=1` to `~/.zshrc.local` yourself), `.zshrc` runs
+  `herdr --session <folder-slug>-<6-char-hash-of-path>` instead, so each project directory gets its
+  own session and reopening a terminal there reattaches to it. `.zshrc` now sources
+  `~/.zshrc.local` (if present) before the auto-attach block; keep personal settings there. On
+  Windows this zsh variable does not apply (no code in `install.ps1`).
+- **Windows is untested** — `windows/install.ps1` has the equivalent config link (assumes
+  `%USERPROFILE%\.config\herdr`), the same two pinned plugins with a `Read-Host` consent, and Go via
+  `winget` (`GoLang.Go`), but none of it has been run on a real Windows machine.
