@@ -179,6 +179,73 @@ if (-not (Get-Command herdr -ErrorAction SilentlyContinue)) {
     Write-Host "  herdr already installed"
 }
 
+# --- Herdr config + plugins (UNTESTED on Windows) ---
+# Everything below is optional and was NOT run on a real Windows machine. Plugins ask for consent
+# (default No) and are skipped when the session is non-interactive.
+function Test-Interactive {
+    [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+}
+
+function Read-YesNo([string]$Prompt) {
+    if (-not (Test-Interactive)) { return $false }
+    (Read-Host "$Prompt [y/N]") -match '^[Yy]'
+}
+
+if (Get-Command herdr -ErrorAction SilentlyContinue) {
+    # Assumption: Herdr reads $HOME\.config\herdr on Windows as well (same layout as macOS/Linux).
+    # Adjust herdrConfigDir if the Windows beta uses a different location (e.g. %APPDATA%).
+    $herdrConfigDir = Join-Path $HOME '.config\herdr'
+    $herdrConfigSrc = Join-Path $scriptDir '..\herdr\config.toml'
+    $herdrConfigDst = Join-Path $herdrConfigDir 'config.toml'
+    New-Item -ItemType Directory -Path $herdrConfigDir -Force | Out-Null
+    if ((Test-Path $herdrConfigDst) -and -not (Get-Item $herdrConfigDst).LinkType) {
+        Write-Host "Backing up existing $herdrConfigDst to $herdrConfigDst.backup"
+        Copy-Item $herdrConfigDst "$herdrConfigDst.backup" -Force
+    }
+    try {
+        New-Item -ItemType SymbolicLink -Path $herdrConfigDst -Target $herdrConfigSrc -Force -ErrorAction Stop | Out-Null
+        Write-Host "Linked Herdr config -> $herdrConfigSrc"
+    } catch {
+        Copy-Item $herdrConfigSrc $herdrConfigDst -Force
+        Write-Host "Copied Herdr config (symlink needs Developer Mode/admin) -> $herdrConfigDst"
+    }
+
+    function Install-HerdrPlugin([string]$Label, [string]$Repo, [string]$Ref) {
+        $cmd = "herdr plugin install $Repo --ref $Ref"
+        if ((herdr plugin list 2>$null) -match [regex]::Escape("github:$Repo@")) {
+            Write-Host "  Herdr plugin $Label already installed"; return
+        }
+        if (Read-YesNo "Install Herdr plugin $Label via '$cmd'?") {
+            try { & herdr plugin install $Repo --ref $Ref }
+            catch { Write-Warning "Herdr plugin $Label install failed; run: $cmd" }
+        } else {
+            Write-Host "Skipping Herdr plugin $Label. Install it manually with: $cmd"
+        }
+    }
+
+    # auto-title builds from source, so it needs Go.
+    $autoTitleCmd = 'herdr plugin install kryptamine/herdr-auto-title --ref 899ee4e4c827129c9920c105f250628ff967ca98'
+    $autoTitleInstalled = (herdr plugin list 2>$null) -match 'github:kryptamine/herdr-auto-title@'
+    if (-not $autoTitleInstalled -and -not (Get-Command go -ErrorAction SilentlyContinue)) {
+        Write-Host "The Herdr auto-title plugin needs Go to build."
+        if (Read-YesNo "Install Go via 'winget install -e --id GoLang.Go'?") {
+            try {
+                Install-WingetPackage 'GoLang.Go'
+                $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                            [Environment]::GetEnvironmentVariable('Path', 'User')
+            } catch { Write-Warning "Go install failed; run: winget install -e --id GoLang.Go" }
+        } else {
+            Write-Host "Skipping Go. Install it manually with: winget install -e --id GoLang.Go"
+        }
+    }
+    if ($autoTitleInstalled -or (Get-Command go -ErrorAction SilentlyContinue)) {
+        Install-HerdrPlugin 'auto-title (automatic tab titles)' 'kryptamine/herdr-auto-title' '899ee4e4c827129c9920c105f250628ff967ca98'
+    } else {
+        Write-Host "Go not available: skipping Herdr plugin auto-title. After installing Go, run: $autoTitleCmd"
+    }
+    Install-HerdrPlugin 'reviewr (code review pane)' 'persiyanov/herdr-reviewr' '4c090225af706bf3aaa24b39fea890a72994f40f'
+}
+
 # --- Claude Code statusline (bash script; needs Git Bash, installed via Git.Git above) ---
 # Git for Windows only adds Git\cmd to PATH (by design, to avoid shadowing other tools), so a
 # bare "bash" on PATH resolves to Windows' WSL-launcher stub in System32, NOT Git Bash — that
