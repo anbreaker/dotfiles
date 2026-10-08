@@ -163,16 +163,15 @@ elif [ "$(uname -s)" = "Linux" ] && [ -S "$HOME/.docker/desktop/docker.sock" ]; 
     export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="unix://$HOME/.docker/desktop/docker.sock"
 fi
 
-# Optional machine-local overrides (e.g. export HERDR_SESSION_PER_PATH=1), kept outside the repo.
+# Personal / machine-local config (e.g. export HERDR_SESSION_PER_PATH=1). Deliberately kept OUTSIDE
+# this repo so a secret can never end up in a commit. Sourced here, before the Herdr auto-attach
+# below, because that block may exec and the variables it reads must already be set.
 [ -f ~/.zshrc.local ] && source ~/.zshrc.local
 
-# Auto-attach a Herdr en cada terminal nueva (Ghostty, Terminal.app, etc.)
-# Sesion por directorio: cada cwd distinto abre/reattachea su propia sesion de
-# Herdr (nombre = slug del basename + hash corto del path completo, para
-# evitar colisiones entre proyectos con el mismo nombre de carpeta). Volver al
-# mismo directorio reattachea la misma sesion; no acumula sesiones sueltas
-# porque el nombre es estable por path, no por PID.
-# Rollback: comentar o borrar este bloque y abrir una pestaña nueva.
+# Auto-attach to Herdr in every new terminal (Ghostty, Terminal.app, etc.).
+# Default: one shared Herdr session. With HERDR_SESSION_PER_PATH=1, each distinct cwd opens or
+# reattaches to its own session (see the opt-in branch below).
+# Rollback: comment out or delete this block and open a new tab.
 WM_VAR="$HERDR_ENV"
 WM_CMD="herdr"
 if [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
@@ -186,10 +185,6 @@ if [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}
     fi
     exec $WM_CMD
 fi
-
-# Personal config (anbreaker) — deliberately kept OUTSIDE this repo so a secret can never end up
-# in a commit here again. Not part of the upstream reibaj91/dotfiles PR.
-[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
 
 # bun completions
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
