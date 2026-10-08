@@ -205,6 +205,44 @@ if command -v herdr >/dev/null 2>&1; then
     ln -sf "$SCRIPT_DIR/herdr/config.toml" "$HOME/.config/herdr/config.toml"
 fi
 
+# Herdr plugins, pinned by commit. Each one is optional and asks for consent (default No, TTY only).
+# Herdr itself may still show its own confirmation; --yes is deliberately not passed.
+# Usage: herdr_plugin_install <label> <owner/repo> <commit>
+herdr_plugin_install() {
+    local label="$1" repo="$2" ref="$3"
+    local cmd="herdr plugin install $repo --ref $ref"
+    if herdr plugin list 2>/dev/null | grep -q "github:$repo@"; then
+        echo "Herdr plugin $label already installed."
+        return 0
+    fi
+    local reply="n"
+    if [ -t 0 ]; then
+        read -r -p "Install Herdr plugin $label via '$cmd'? [y/N] " reply
+    else
+        echo "Non-interactive shell: skipping Herdr plugin $label. Run '$cmd' manually if you want it."
+        return 0
+    fi
+    case "$reply" in
+        [Yy]*) $cmd || echo "Herdr plugin $label install failed; run: $cmd" ;;
+        *) echo "Skipping Herdr plugin $label. Install it manually with: $cmd" ;;
+    esac
+}
+
+if command -v herdr >/dev/null 2>&1; then
+    # auto-title builds from source, so it needs Go.
+    AUTO_TITLE_CMD="herdr plugin install kryptamine/herdr-auto-title --ref 899ee4e4c827129c9920c105f250628ff967ca98"
+    if ! command -v go >/dev/null 2>&1 && ! herdr plugin list 2>/dev/null | grep -q "github:kryptamine/herdr-auto-title@"; then
+        echo "The Herdr auto-title plugin needs Go to build."
+        pkg_install Go go golang go || true
+    fi
+    if command -v go >/dev/null 2>&1 || herdr plugin list 2>/dev/null | grep -q "github:kryptamine/herdr-auto-title@"; then
+        herdr_plugin_install "auto-title (automatic tab titles)" kryptamine/herdr-auto-title 899ee4e4c827129c9920c105f250628ff967ca98
+    else
+        echo "Go not available: skipping Herdr plugin auto-title. After installing Go, run: $AUTO_TITLE_CMD"
+    fi
+    herdr_plugin_install "reviewr (code review pane)" persiyanov/herdr-reviewr 4c090225af706bf3aaa24b39fea890a72994f40f
+fi
+
 if command -v herdr >/dev/null 2>&1 && command -v claude >/dev/null 2>&1; then
     herdr integration install claude || true
 fi
