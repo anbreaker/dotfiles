@@ -16,6 +16,12 @@ __herdr_ws_root() {
   git -C "$1" rev-parse --show-toplevel 2>/dev/null
 }
 
+# Prints the id of the workspace labelled $1 (first match), or nothing if there is none.
+__herdr_ws_id_by_label() {
+  herdr workspace list 2>/dev/null |
+    jq -r --arg l "$1" '[.result.workspaces[]? | select(.label == $l)][0].workspace_id // empty' 2>/dev/null
+}
+
 __herdr_workspace_autocreate() {
   { [[ -n "$HERDR_ENV" ]] && command -v herdr >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 } || return
   local root label
@@ -24,7 +30,7 @@ __herdr_workspace_autocreate() {
   [[ "$root" == "$__herdr_last_ws_root" ]] && return
   __herdr_last_ws_root="$root"
   label="${root:t}"
-  herdr workspace list 2>/dev/null | jq -e --arg l "$label" '.result.workspaces[]? | select(.label == $l)' >/dev/null 2>&1 && return
+  [[ -n "$(__herdr_ws_id_by_label "$label")" ]] && return
   herdr workspace create --cwd "$root" --label "$label" --focus >/dev/null 2>&1
 }
 __herdr_last_ws_root="$(__herdr_ws_root "$PWD")"
@@ -34,7 +40,9 @@ add-zsh-hook chpwd __herdr_workspace_autocreate
 # --- 2. Agent wrapper: one workspace per project when launching an agent -------------------
 # Launching agy/claude/grok/opencode from a project (git toplevel, or cwd if not a repo)
 # different from the current workspace's opens a new workspace rooted there and starts the
-# agent in it. In the same project the agent runs normally.
+# agent in it. In the same project the agent runs normally. If a workspace with that label already
+# exists it is focused instead (no duplicate, and the agent is NOT launched).
+# Return codes: 0 = handled (workspace opened or focused, run nothing else); 1 = run in place.
 # Only interactive sessions are redirected: no args or flags only (-c, --resume...);
 # subcommands/positional prompts and -p/--print/--version/--help run in place.
 # Bypass a single call with `command claude`.
@@ -58,7 +66,16 @@ __herdr_agent_redirect() {
   fi
   [[ $root == $target ]] && return 1
 
-  local ws pane
+  # A workspace with this label already exists: focus it instead of creating a duplicate, and
+  # report success so the caller does not also run the agent in the current pane.
+  local existing ws pane
+  existing=$(__herdr_ws_id_by_label "${target:t}")
+  if [[ -n $existing ]]; then
+    herdr workspace focus "$existing" >/dev/null 2>&1 || return 1
+    print -P "%F{cyan}herdr:%f workspace %B${target:t}%b already exists and was focused; $kind was not started"
+    return 0
+  fi
+
   ws=$(herdr workspace create --cwd "$target" --label "${target:t}" \
         --env "HERDR_WORKSPACE_ROOT=$target" --focus 2>/dev/null) || return 1
   pane=$(jq -r '.result.root_pane.pane_id // empty' <<<"$ws")

@@ -184,10 +184,13 @@ remove those manually if you uninstall.
 #### Herdr config, plugins and package managers
 
 Everything here is **optional**: each step asks `[y/N]` (default No), only when stdin is a TTY, and
-on decline, non-interactive runs or failure it prints the exact manual command and continues.
+on decline, non-interactive runs or failure it prints the exact manual command and continues. A step that
+is already done (config already linked, plugin already installed) is skipped without asking.
 
-- **Config** — if `herdr` is installed, `herdr/config.toml` is linked to `~/.config/herdr/config.toml`
-  (a real existing file is backed up to `config.toml.backup` first). Rollback: delete the symlink.
+- **Config** — if `herdr` is installed, `install.sh` asks before linking `herdr/config.toml` to
+  `~/.config/herdr/config.toml`. Accepting replaces any existing config with this repo's theme/panel
+  settings (a real existing file is backed up to `config.toml.backup` first). If the target already
+  links to the repo file it prints "already linked" and does not ask. Rollback: delete the symlink.
 - **Plugins** (pinned by commit, skipped if already in `herdr plugin list`):
 
   | Plugin | Purpose | Command |
@@ -237,7 +240,12 @@ on decline, non-interactive runs or failure it prints the exact manual command a
   - **Agent wrapper** — `claude`, `agy`, `grok` and `opencode` launched interactively (no args, or
     flags only) from a project other than the current space's open a new space rooted there and run
     the agent in it. Same project, `-p/--print`, `--version`, `--help` and positional prompts or
-    subcommands run in place. Bypass a single call with `command claude`.
+    subcommands run in place. If a space with that label already exists, the wrapper **focuses it
+    instead of creating a duplicate and does not launch the agent** (run it from that space). Bypass a
+    single call with `command claude`.
+
+  Known limitation: both mechanisms match spaces by **folder name only**, so two repos with the same
+  basename in different paths share one space.
 
   Both use `--focus`, so Herdr **moves your focus to the new space**; delete `--focus` in
   `herdr/workspaces.zsh` to create spaces in the background. The helper `__herdr_agent_redirect <cmd> "$@"`
@@ -245,5 +253,5 @@ on decline, non-interactive runs or failure it prints the exact manual command a
   are not included and belong in `~/.zshrc.local`, calling that function and falling back to
   `command <cmd>`. Rollback: remove the flag and open a new terminal.
 - **Windows is untested** — `windows/install.ps1` has the equivalent config link (assumes
-  `%USERPROFILE%\.config\herdr`), the same two pinned plugins with a `Read-Host` consent, and Go via
+  `%USERPROFILE%\.config\herdr`, with a `Read-Host` consent), the same two pinned plugins with a `Read-Host` consent, and Go via
   `winget` (`GoLang.Go`), but none of it has been run on a real Windows machine.
