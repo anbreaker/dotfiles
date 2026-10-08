@@ -241,7 +241,12 @@ file first).
   - **Agent wrapper** — `claude`, `agy`, `grok` and `opencode` launched interactively (no args, or
     flags only) from a project other than the current space's open a new space rooted there and run
     the agent in it. Same project, `-p/--print`, `--version`, `--help` and positional prompts or
-    subcommands run in place. Bypass a single call with `command claude`.
+    subcommands run in place. If a space with that label already exists, the wrapper **focuses it
+    instead of creating a duplicate and does not launch the agent** (run it from that space). Bypass a
+    single call with `command claude`.
+
+  Known limitation: both mechanisms match spaces by **folder name only**, so two repos with the same
+  basename in different paths share one space.
 
   Both use `--focus`, so Herdr **moves your focus to the new space**; delete `--focus` in
   `herdr/workspaces.zsh` to create spaces in the background. The helper `__herdr_agent_redirect <cmd> "$@"`
