@@ -155,10 +155,14 @@ if [ -f "$HOME/.local/bin/env" ]; then . "$HOME/.local/bin/env"; fi
 export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
 export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
 
+# Optional machine-local overrides (e.g. export HERDR_SESSION_PER_PATH=1), kept outside the repo.
+[ -f ~/.zshrc.local ] && source ~/.zshrc.local
+
 # Auto-attach a Herdr en cada terminal nueva (Ghostty, Terminal.app, etc.)
 # Rollback: comentar o borrar este bloque y abrir una pestaña nueva.
+# Bypass temporal (ej. para `herdr update`): `touch ~/.no-herdr`; para reactivar: `rm ~/.no-herdr`.
 WM_VAR="$HERDR_ENV"
 WM_CMD="herdr"
-if [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
+if [[ ! -f "$HOME/.no-herdr" ]] && [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
     exec $WM_CMD
 fi
