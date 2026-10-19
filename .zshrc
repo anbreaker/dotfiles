@@ -172,9 +172,10 @@ fi
 # Default: one shared Herdr session. With HERDR_SESSION_PER_PATH=1, each distinct cwd opens or
 # reattaches to its own session (see the opt-in branch below).
 # Rollback: comment out or delete this block and open a new tab.
+# Temporary bypass (e.g. for `herdr update`): `touch ~/.no-herdr`; to re-enable: `rm ~/.no-herdr`.
 WM_VAR="$HERDR_ENV"
 WM_CMD="herdr"
-if [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
+if [[ ! -f "$HOME/.no-herdr" ]] && [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
     if [[ "$HERDR_SESSION_PER_PATH" == "1" ]]; then
         # Opt-in: one Herdr session per directory. The name is the slugified basename plus a short
         # hash of the full path (avoids collisions between same-named folders) and is stable per
