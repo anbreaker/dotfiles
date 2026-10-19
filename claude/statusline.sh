@@ -48,9 +48,9 @@ group() {                     # group <n> -> miles con coma (bash puro, sin depe
 }
 
 # ---------- datos del JSON ----------
-dir=$(jq -r '.workspace.current_dir // ""' <<<"$input")
+dir=$(jq -r '.workspace.current_dir // .cwd // ""' <<<"$input")
 user=$(whoami)
-disp_dir="${dir/#$HOME/~}"   # abrevia el home a ~ SOLO para mostrar; cd/git usan la ruta real
+disp_dir="${dir/#$HOME/\~}"   # abrevia el home a ~ SOLO para mostrar; cd/git usan la ruta real
 
 # Glyphs por bytes UTF-8 (octal): NO usar literales, se pierden al editar el archivo
 SEP=$(printf '\356\202\260')          # U+E0B0 flechita separadora
@@ -140,11 +140,20 @@ h5_pct=$(round "${h5_pct:-0}"); d7_pct=$(round "${d7_pct:-0}")
 # guardamos el último estado bueno para el próximo render / la próxima sesión
 printf '%s %s %s %s %s %s %s\n' "${session:-$c_session}" "$ctx_pct" "$ctx_tok" "$h5_pct" "$h5_reset" "$d7_pct" "$d7_reset" >"$CACHE" 2>/dev/null
 
-h5_t=$(date -r "$h5_reset" "+%H:%M" 2>/dev/null)
-d7_t=$(date -r "$d7_reset" "+%a %d %H:%M" 2>/dev/null)
+# date portable: GNU date (Linux) usa -d "@epoch"; BSD date (macOS) usa -r epoch
+epoch_to() {                  # epoch_to <epoch> <formato>
+  date -d "@$1" "$2" 2>/dev/null || date -r "$1" "$2" 2>/dev/null
+}
+h5_t=$(epoch_to "$h5_reset" "+%H:%M")
+d7_t=$(epoch_to "$d7_reset" "+%a %d %H:%M")
 
 line2=$(printf '\033[90m5h \033[0m%s %s%% \033[90m(↺%s)\033[0m   \033[90m7d \033[0m%s %s%% \033[90m(↺%s)\033[0m' \
   "$(bar "$h5_pct")" "$h5_pct" "$h5_t" \
   "$(bar "$d7_pct")" "$d7_pct" "$d7_t")
+
+# cuenta activa: "Personal" en #FC186C + email de ~/.claude.json
+acct_email=$(jq -r '.oauthAccount.emailAddress // empty' "$HOME/.claude.json" 2>/dev/null)
+line2+=$(printf '   👤 \033[1;38;2;252;24;108mPersonal\033[0m')
+[[ -n "$acct_email" ]] && line2+=$(printf ' \033[38;5;245m%s\033[0m' "$acct_email")
 
 printf '%s\n%s' "$line1" "$line2"

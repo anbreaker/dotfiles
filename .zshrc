@@ -175,7 +175,7 @@ fi
 # Temporary bypass (e.g. for `herdr update`): `touch ~/.no-herdr`; to re-enable: `rm ~/.no-herdr`.
 WM_VAR="$HERDR_ENV"
 WM_CMD="herdr"
-if [[ ! -f "$HOME/.no-herdr" ]] && [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -t 1 ]]; then
+if [[ ! -f "$HOME/.no-herdr" ]] && [[ $- == *i* ]] && command -v "$WM_CMD" >/dev/null 2>&1 && [[ -z "${WM_VAR#/}" ]] && [[ -z "$TMUX" ]] && [[ -z "$ZELLIJ" ]] && [[ -z "$HERDR_ENV" ]] && [[ -z "$HERDR_NO_AUTO" ]] && [[ -t 1 ]]; then
     if [[ "$HERDR_SESSION_PER_PATH" == "1" ]]; then
         # Opt-in: one Herdr session per directory. The name is the slugified basename plus a short
         # hash of the full path (avoids collisions between same-named folders) and is stable per
@@ -186,6 +186,13 @@ if [[ ! -f "$HOME/.no-herdr" ]] && [[ $- == *i* ]] && command -v "$WM_CMD" >/dev
     fi
     exec $WM_CMD
 fi
+
+# `noherdr`: open a gnome-terminal window with a plain zsh (no Herdr auto-attach), e.g. to run
+# `herdr update`. Unlike ~/.no-herdr it affects only that window, and it can be run from inside
+# Herdr: it strips the inherited HERDR_* vars so the new shell is fully outside Herdr.
+noherdr() {
+    gnome-terminal -- env ${${(k)parameters[(I)HERDR_*]}/#/-u} -u TERM_PROGRAM -u TERM_PROGRAM_VERSION HERDR_NO_AUTO=1 zsh
+}
 
 # Opt-in Herdr spaces (HERDR_AUTO_WORKSPACES=1): chpwd hook + agent wrapper. ~/.zshrc is a symlink
 # into the repo, so resolve the real directory of this file to find herdr/workspaces.zsh.
